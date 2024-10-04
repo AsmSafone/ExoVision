@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import data from './data.json';
 import Exovision from './components/Exovision';
+import Loader from './components/Loader';
 const ExoplanetList = () => {
     const [exoplanets, setExoplanets] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -23,9 +24,9 @@ const ExoplanetList = () => {
         //                 throw new Error('Failed to fetch data');
         //             }
         //             const jsonData = await response.json();
-        //             // console.log(jsonData);
-        //             localStorage.setItem('exoplanets', JSON.stringify(jsonData));
+        //             // localStorage.setItem('exoplanets', JSON.stringify(jsonData));
         //             setExoplanets(jsonData);
+        //             console.log(jsonData);
         //         } catch (error) {
         //             setError(error.message);
         //         } finally {
@@ -35,12 +36,19 @@ const ExoplanetList = () => {
         // };
 
         // fetchExoplanets();
-        setExoplanets(data ? data.slice(0,500) : []);
-        setLoading(false);
+        setTimeout(() => {
+            const a = [];
+            for (let i = 0; i < data.length; i++) {
+                a.push(JSON.parse(data[i]));
+            }
+            setExoplanets(a);
+            setLoading(false);
+
+        }, 3000);
     }, []);
 
     if (loading) {
-        return <div>Loading exoplanets...</div>;
+        return <Loader />;
     }
 
     if (error) {

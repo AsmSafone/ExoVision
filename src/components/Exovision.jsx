@@ -1,7 +1,8 @@
-import { Canvas, useThree } from '@react-three/fiber';
+import { Canvas, useLoader, useThree } from '@react-three/fiber';
 import { OrbitControls, Stars, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
+
 
 const CameraController = ({ cameraPosition }) => {
     const { camera } = useThree();  // Accessing the camera from the Canvas context
@@ -37,43 +38,28 @@ const CameraController = ({ cameraPosition }) => {
     return null;
 };
 
-const PlanetMesh = ({ planet, onHover, onClick }) => {
+const PlanetMesh = ({ planet, onClick }) => {
     const { camera, size } = useThree();
     const meshRef = useRef();
 
-    const calculateScreenPosition = () => {
-        if (!meshRef.current) return;
-        const vector = new THREE.Vector3();
-        meshRef.current.getWorldPosition(vector);
-        vector.project(camera);
-        const x = (vector.x * 0.5 + 0.5) * size.width;
-        const y = (vector.y * -0.5 + 0.5) * size.height;
-
-        return { x, y };
-    };
-
-    const handlePointerOver = () => {
-        const screenPos = calculateScreenPosition();
-        onHover(planet, screenPos);
-    };
-
+    const texture = useLoader(THREE.TextureLoader, "globes/planet-4.jpg");
     return (
         <mesh
             ref={meshRef}
             position={[planet.x * 50, planet.y * 50, planet.z * 50]}
-            onPointerOver={handlePointerOver}
-            onPointerOut={() => onHover(null, null)}
             onClick={() => onClick(planet)} // Handle clicks to track the planets
         >
-            <sphereGeometry args={[1, 32, 32]} />
+            <sphereGeometry args={[window.screen.width <= 768 ? 1.5 : 1, 32, 32]} />
             <meshStandardMaterial
-                color={`hsl(${planet.st_teff}, 100%, 50%)` || 'white'}
-                emissive={`hsl(${planet.st_teff}, 100%, 70%)`}
-                emissiveIntensity={1.5}
-                metalness={0.5}
-                roughness={0.2}
+                map={texture}
+                color={`hsl(${planet.st_teff}, 100%, 95%)`}
+                emissive={`hsl(${planet.st_teff}, 50%, 30%)`}
+                emissiveIntensity={0.9}
+                metalness={0.1}
+                roughness={0.5}
+                transparent={true}
+                opacity={0.9}
             />
-
         </mesh>
     );
 };
@@ -109,21 +95,23 @@ const ScreenCapture = forwardRef((props, ref) => {
 
 const Exovision = ({ data }) => {
     const [autoRotate, setAutoRotate] = useState(false);
-    const [hoveredPlanet, setHoveredPlanet] = useState();
     const [rotationSpeed, setRotationSpeed] = useState(1);
     const [clickedPlanets, setClickedPlanets] = useState([]); // To track clicked planets
-    const [cameraPosition, setCameraPosition] = useState([0, 0, 100]);
+    const [cameraPosition, setCameraPosition] = useState([]);
     const [viewFromPlanet, setViewFromPlanet] = useState(null)
     const [isDrawConstelletion, setIsDrawConstelletion] = useState(false)
     const canvasRef = useRef();
     const screenCaptureRef = useRef();
     const [saving, setSaving] = useState(false)
+    const [isHiddenController, setIsHiddenController] = useState(true)
 
+    function resetCameraPosition() {
+        setCameraPosition([0, 0, 100])
+    }
 
-    // Handle hover event
-    const handleHover = (planet) => {
-        setHoveredPlanet(planet);
-    };
+    useEffect(() => {
+        resetCameraPosition();
+    }, [])
 
     // Handle planet click to form constellation points
     const handlePlanetClick = (planet) => {
@@ -153,32 +141,36 @@ const Exovision = ({ data }) => {
 
     return (
         <div className="relative h-screen bg-black">
-            <Canvas camera={{ position: cameraPosition, fov: 90 }} ref={canvasRef}>
+            <Canvas camera={{ position: cameraPosition, fov: window.screen.width <= 768 ? 110 : 90 }} ref={canvasRef}>
                 <ambientLight intensity={0.5} />
                 <pointLight position={[10, 10, 10]} />
+
+                {/* <CameraAdjust /> */}
+
                 <OrbitControls
-                    enableZoom={viewFromPlanet === null}
-                    zoomToCursor={false}    // Prevent zooming into cursor
-                    maxDistance={100}       // Limit the zoom-out distance to prevent stars from fading
-                    minDistance={5}         // Limit the zoom-in distance
+                    enableZoom={window.screen.width <= 768 ? true : viewFromPlanet === null}
+                    maxZoom={20}
+                    zoomToCursor={false}
+                    maxDistance={100}
+                    minDistance={5}
                     autoRotate={autoRotate}
                     autoRotateSpeed={rotationSpeed}
                 />
                 <Stars
-                    radius={500}      // A large radius to position the stars far from the camera
-                    depth={50}        // Keep the stars at a fixed depth
-                    count={5000}      // Number of stars
-                    factor={10}        // Adjust the size factor of stars to be suitable for distant viewing
-                    saturation={0}    // Keep the stars neutral white
-                    fade={false}      // Disable fade to avoid disappearing with zoom
-                    speed={0}         // Static stars
+                    radius={500}
+                    depth={50}
+                    count={5000}
+                    factor={10}
+                    saturation={0}
+                    fade={false}
+                    speed={0}
                 />
 
 
 
                 {/* Render planets */}
                 {data.map((planet, idx) => (
-                    <PlanetMesh key={idx} planet={planet} onHover={handleHover} onClick={handlePlanetClick} />
+                    <PlanetMesh key={idx} planet={planet} onClick={handlePlanetClick} />
                 ))}
 
                 {/* Render lines for constellations */}
@@ -197,63 +189,58 @@ const Exovision = ({ data }) => {
             </Canvas>
 
             {/* Controllers */}
-            <div className="absolute flex flex-col gap-2 w-xl text-white w-80" style={{ right: `10px`, bottom: `10px` }}>
-                {/* Display hovered planet details */}
-                {hoveredPlanet && (
-                    <div className="border border-white p-4 rounded"
-                    // style={{ left: `${screenPosition.x}px`, top: `${screenPosition.y}px` }}
-                    >
-                        <h3>{hoveredPlanet.pl_name}</h3>
-                        <p>Orbital Distance: {hoveredPlanet.pl_orbsmax}</p>
-                        <p>Star Temp: {hoveredPlanet.st_teff} K</p>
-                        <p>Distance: {hoveredPlanet.sy_dist} light-years</p>
-                        <p>Discovery: {hoveredPlanet.disc_year}</p>
-                    </div>
-                )}
-                {viewFromPlanet && (
-                    <div className="border border-white p-4 rounded"
-                    // style={{ left: `${screenPosition.x}px`, top: `${screenPosition.y}px` }}
-                    >
-                        <h3>Sky of the {viewFromPlanet.pl_name}</h3>
-                        <p>Orbital Distance: {viewFromPlanet.pl_orbsmax}</p>
-                        <p>Star Temp: {viewFromPlanet.st_teff} K</p>
-                        <p>Distance: {viewFromPlanet.sy_dist} light-years</p>
-                        <p>Discovery: {viewFromPlanet.disc_year}</p>
-                    </div>
-                )}
-                <div className="border border-white p-4 rounded flex flex-col gap-2 w-full">
-                    {autoRotate && <div>
-                        <label htmlFor="rotation-speed">Rotation speed</label>
-                        <input id="rotation-speed" type="range" min="1" max="100" value={rotationSpeed} step="5" className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700" onChange={e => setRotationSpeed(e.target.value)} />
-                    </div>}
-                    <div>
-                        <label className="inline-flex items-center cursor-pointer" htmlFor="rotation">
-                            <input type="checkbox" className="sr-only peer" onChange={e => handleAutoRotate(e.target.checked)} id='rotation' checked={autoRotate} />
-                            <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
-                            <span className="ms-3 text-sm font-medium text-white-900 dark:text-white-300">Auto rotation</span>
-                        </label>
-                    </div>
-                    <div>
-                        <label className="inline-flex items-center cursor-pointer" htmlFor="draw">
-                            <input type="checkbox" className="sr-only peer" onChange={e => handleDrawConstelletion(e.target.checked)} id='draw' checked={isDrawConstelletion} />
-                            <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
-                            <span className="ms-3 text-sm font-medium text-white-900 dark:text-white-300">Draw Constelletion</span>
-                        </label>
-                    </div>
-                    {cameraPosition[0] !== 0 && cameraPosition[1] !== 0 && cameraPosition[2] !== 100 && <button onClick={() => { setCameraPosition([0, 0, 100]); setViewFromPlanet(null) }} className="p-2 rounded border border-white hover:bg-white hover:text-black">Exit View</button>}
-                    {clickedPlanets.length > 0 && (
-                        <>
-                            <button onClick={() => setClickedPlanets(prev => prev.slice(0, -2))} className="p-2 rounded border border-white hover:bg-white hover:text-black">Undo</button>
-                            <button onClick={clearConstellation} className="p-2 rounded border border-white hover:bg-white hover:text-black">Clear Drawing</button>
-                            <button onClick={() => {
-                                if (screenCaptureRef.current) {
-                                    setSaving(true)
-                                    screenCaptureRef.current.captureScreenshot().finally(() => setSaving(false)); // Call the exposed method
-                                }
-                            }} className="p-2 rounded border border-white hover:bg-white hover:text-black">Save Constellation</button>
-                        </>
-                    )}
-                </div>
+            <div className="absolute flex md:flex-col flex-row-reverse gap-2 w-xl text-white w-80" style={{ right: `10px`, bottom: window.screen.width <= 786 ? '100px' : `10px` }}>
+
+                <span className="md:hidden text-right border px-5 pt-2" onClick={() => setIsHiddenController(!isHiddenController)}>{isHiddenController ? 'v' : '^'}</span>
+                {
+                    isHiddenController && (
+                        <div className='flex flex-col'>
+                            {viewFromPlanet && (
+                                <div className="border border-white p-4 rounded"
+                                >
+                                    <h3>Sky of the {viewFromPlanet.pl_name}</h3>
+                                    <p>Orbital Distance: {viewFromPlanet.pl_orbsmax}</p>
+                                    <p>Star Temp: {viewFromPlanet.st_teff} K</p>
+                                    <p>Distance: {viewFromPlanet.sy_dist} light-years</p>
+                                    <p>Discovery: {viewFromPlanet.disc_year}</p>
+                                </div>
+                            )}
+                            <div className="border border-white p-4 rounded flex flex-col gap-2 w-full">
+                                {autoRotate && <div>
+                                    <label htmlFor="rotation-speed">Rotation speed</label>
+                                    <input id="rotation-speed" type="range" min="1" max="100" value={rotationSpeed} step="5" className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700" onChange={e => setRotationSpeed(e.target.value)} />
+                                </div>}
+                                <div>
+                                    <label className="inline-flex items-center cursor-pointer" htmlFor="rotation">
+                                        <input type="checkbox" className="sr-only peer" onChange={e => handleAutoRotate(e.target.checked)} id='rotation' checked={autoRotate} />
+                                        <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                                        <span className="ms-3 text-sm font-medium text-white-900 dark:text-white-300">Auto rotation</span>
+                                    </label>
+                                </div>
+                                <div>
+                                    <label className="inline-flex items-center cursor-pointer" htmlFor="draw">
+                                        <input type="checkbox" className="sr-only peer" onChange={e => handleDrawConstelletion(e.target.checked)} id='draw' checked={isDrawConstelletion} />
+                                        <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                                        <span className="ms-3 text-sm font-medium text-white-900 dark:text-white-300">Draw Constelletion</span>
+                                    </label>
+                                </div>
+                                {cameraPosition[0] !== 0 && cameraPosition[1] !== 0 && cameraPosition[2] !== 100 && <button onClick={() => { resetCameraPosition(); setViewFromPlanet(null) }} className="p-2 rounded border border-white hover:bg-white hover:text-black">Exit View</button>}
+                                {clickedPlanets.length > 0 && (
+                                    <>
+                                        <button onClick={() => setClickedPlanets(prev => prev.slice(0, -2))} className="p-2 rounded border border-white hover:bg-white hover:text-black">Undo</button>
+                                        <button onClick={clearConstellation} className="p-2 rounded border border-white hover:bg-white hover:text-black">Clear Drawing</button>
+                                        <button onClick={() => {
+                                            if (screenCaptureRef.current) {
+                                                setSaving(true)
+                                                screenCaptureRef.current.captureScreenshot().finally(() => setSaving(false)); // Call the exposed method
+                                            }
+                                        }} className="p-2 rounded border border-white hover:bg-white hover:text-black">Save Constellation</button>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    )
+                }
             </div>
         </div>
     );
