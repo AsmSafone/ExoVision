@@ -1,4 +1,4 @@
-import { Canvas, useLoader, useThree } from '@react-three/fiber';
+import { Canvas, useLoader, useThree, useFrame } from '@react-three/fiber';
 import { OrbitControls, Stars, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
@@ -41,24 +41,25 @@ const CameraController = ({ cameraPosition }) => {
 const PlanetMesh = ({ planet, onClick }) => {
     const { camera, size } = useThree();
     const meshRef = useRef();
+    const texture = useLoader(THREE.TextureLoader, "globes/planet.png");
 
-    const texture = useLoader(THREE.TextureLoader, "globes/planet-4.jpg");
+    useFrame(() => {
+        const cameraDistance = meshRef.current.position.distanceTo(camera.position);
+        meshRef.current.material.opacity = Math.min(cameraDistance / 10, 1);
+    });
+
     return (
         <mesh
             ref={meshRef}
             position={[planet.x * 50, planet.y * 50, planet.z * 50]}
-            onClick={() => onClick(planet)} // Handle clicks to track the planets
+            onClick={() => onClick(planet)}
         >
-            <sphereGeometry args={[window.screen.width <= 768 ? 1.5 : 1, 32, 32]} />
-            <meshStandardMaterial
+            <sphereGeometry args={[window.screen.width <= 768 ? 1.5 : 1.2, 32, 32]} />
+            <meshBasicMaterial
                 map={texture}
                 color={`hsl(${planet.st_teff}, 100%, 95%)`}
-                emissive={`hsl(${planet.st_teff}, 50%, 30%)`}
-                emissiveIntensity={0.9}
-                metalness={0.1}
-                roughness={0.5}
                 transparent={true}
-                opacity={0.9}
+                side={THREE.DoubleSide}
             />
         </mesh>
     );
@@ -102,7 +103,6 @@ const Exovision = ({ data }) => {
     const [isDrawConstelletion, setIsDrawConstelletion] = useState(false)
     const canvasRef = useRef();
     const screenCaptureRef = useRef();
-    const [saving, setSaving] = useState(false)
     const [isHiddenController, setIsHiddenController] = useState(true)
 
     function resetCameraPosition() {
@@ -113,7 +113,7 @@ const Exovision = ({ data }) => {
         resetCameraPosition();
     }, [])
 
-    // Handle planet click to form constellation points
+    
     const handlePlanetClick = (planet) => {
         const cemeraPos = [planet.x * 50, planet.y * 50, planet.z * 50];
         if (isDrawConstelletion) {
@@ -124,7 +124,7 @@ const Exovision = ({ data }) => {
         }
     };
 
-    // Handle clearing constellations
+    
     const clearConstellation = () => {
         setClickedPlanets([]);
     };
@@ -140,8 +140,16 @@ const Exovision = ({ data }) => {
     }
 
     return (
-        <div className="relative h-screen bg-black">
-            <Canvas camera={{ position: cameraPosition, fov: window.screen.width <= 768 ? 110 : 90 }} ref={canvasRef}>
+        <div className="relative">
+            <Canvas
+                style={{ height: "100vh" }}
+                camera={{ position: cameraPosition, fov: window.screen.width <= 768 ? 110 : 90 }}
+                ref={canvasRef}
+                gl={{ preserveDrawingBuffer: false }}
+                onCreated={({ gl }) => {
+                    gl.setClearColor('#000'); // Set your desired background color
+                }}
+            >
                 <ambientLight intensity={0.5} />
                 <pointLight position={[10, 10, 10]} />
 
@@ -171,21 +179,21 @@ const Exovision = ({ data }) => {
                 {/* Render planets */}
                 {data.map((planet, idx) => (
                     <PlanetMesh key={idx} planet={planet} onClick={handlePlanetClick} />
+                    // <GlowingPlanet key={idx} planet={planet} onClick={handlePlanetClick} />
                 ))}
 
                 {/* Render lines for constellations */}
                 {clickedPlanets.length > 1 && (
                     <Line
                         points={clickedPlanets} // First layer - Neon blue
-                        color={`hsl(220, 100%, 70%)`} // Neon blue
+                        color={`hsl(220, 100%, 100%)`} // Neon blue
                         transparent={true}
                         opacity={0.9}
                         lineWidth={1} // Thicker for outer layer
                     />
                 )}
-
                 <CameraController cameraPosition={cameraPosition} />
-                <ScreenCapture ref={screenCaptureRef} captureScreenshot={(screenshot) => console.log(screenshot)} />
+                <ScreenCapture ref={screenCaptureRef} />
             </Canvas>
 
             {/* Controllers */}
@@ -231,8 +239,7 @@ const Exovision = ({ data }) => {
                                         <button onClick={clearConstellation} className="p-2 rounded border border-white hover:bg-white hover:text-black">Clear Drawing</button>
                                         <button onClick={() => {
                                             if (screenCaptureRef.current) {
-                                                setSaving(true)
-                                                screenCaptureRef.current.captureScreenshot().finally(() => setSaving(false)); // Call the exposed method
+                                                screenCaptureRef.current.captureScreenshot(); 
                                             }
                                         }} className="p-2 rounded border border-white hover:bg-white hover:text-black">Save Constellation</button>
                                     </>
